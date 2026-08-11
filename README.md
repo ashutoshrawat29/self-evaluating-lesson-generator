@@ -1,154 +1,197 @@
 # Self-Evaluating Lesson Generator
 
-An agentic educational content generation system that generates beginner-friendly lessons, evaluates them against a strict rubric, automatically regenerates failed lessons, and persists failure/success information as memory for future runs.
+An agentic lesson-generation system that generates beginner-friendly educational content, evaluates it against a strict rubric, and automatically regenerates the lesson when it fails evaluation.
 
-The system is built using **Python, LangGraph, Gemini API, FastAPI, Streamlit, SQLite, and Pydantic**.
+Built with **Python, LangGraph, Gemini, FastAPI, Streamlit, SQLite, and Pydantic**.
 
 ---
 
-## 1. Project Overview
+## 🚀 How to Run
 
-The application accepts a topic from the user and generates a complete beginner-friendly lesson.
+### 1. Clone the repository
 
-Instead of blindly returning the first LLM-generated response, the system follows an evaluation loop:
-
-```text
-User
-  |
-  v
-Streamlit Frontend
-  |
-  | HTTP POST
-  v
-FastAPI
-  |
-  v
-LangGraph Workflow
-  |
-  +--> Load Memory
-  |
-  +--> Generate Lesson -----> Gemini
-  |
-  +--> Deterministic Pre-checks
-  |
-  +--> Evaluate Lesson -----> Gemini
-  |
-  +---- PASS ----------------------+
-  |                                |
-  |                                v
-  |                             Finalize
-  |                                |
-  |                                v
-  |                               END
-  |
-  +---- FAIL
-          |
-          v
-      Log Failure
-          |
-          v
-        SQLite
-          |
-          v
-      Regenerate -------> Gemini
-          |
-          v
-      Pre-check
-          |
-          v
-      Evaluate
-          |
-          +---- PASS --> Finalize --> END
-          |
-          +---- FAIL --> Retry if limit remains
+```bash
+git clone https://github.com/YOUR_USERNAME/self-evaluating-lesson-generator.git
+cd self-evaluating-lesson-generator
 ```
 
-The system uses bounded retries to prevent infinite regeneration loops.
+### 2. Create and activate a virtual environment
 
----
+**macOS/Linux:**
 
-# 2. Main Features
-
-* Beginner-friendly lesson generation
-* Gemini LLM integration
-* LangGraph-based workflow orchestration
-* Independent LLM evaluator
-* Deterministic pre-checks
-* Automatic regeneration after evaluation failure
-* Bounded retry mechanism
-* Persistent SQLite memory
-* Failure/rejection logging
-* Successful-fix memory
-* FastAPI REST API
-* Interactive Streamlit frontend
-* Swagger/OpenAPI documentation
-* Deliberate failure mode for demonstrating the self-evaluation loop
-
----
-
-# 3. Architecture
-
-The application is divided into several layers.
-
-```text
-                    +----------------+
-                    |    User        |
-                    +-------+--------+
-                            |
-                            v
-                    +---------------+
-                    |   Streamlit   |
-                    |   Frontend    |
-                    +-------+-------+
-                            |
-                       HTTP POST
-                            |
-                            v
-                    +---------------+
-                    |    FastAPI    |
-                    |     API       |
-                    +-------+-------+
-                            |
-                            v
-                    +---------------+
-                    |   LangGraph   |
-                    |  Orchestrator |
-                    +-------+-------+
-                            |
-              +-------------+-------------+
-              |             |             |
-              v             v             v
-         Generator      Evaluator    Regenerator
-              |             |             |
-              +-------------+-------------+
-                            |
-                            v
-                       Gemini API
-                            |
-                            v
-                         SQLite
-                         Memory
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
----
+**Windows:**
 
-# 4. Workflow
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+```
 
-## Step 1 — User enters a topic
+### 3. Install dependencies
 
-Example:
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Configure Gemini
+
+Create a `.env` file in the project root:
+
+```env
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=your_gemini_model
+
+MAX_RETRIES=2
+DATABASE_PATH=data/memory.db
+
+DEMO_FAILURE=false
+```
+
+Get a Gemini API key from Google AI Studio.
+
+**Do not commit `.env` to GitHub.**
+
+### 5. Start FastAPI
+
+```bash
+uvicorn app.main:app --reload
+```
+
+The API will be available at:
+
+```text
+http://localhost:8000
+```
+
+API documentation:
+
+```text
+http://localhost:8000/docs
+```
+
+### 6. Start Streamlit
+
+Open another terminal, activate the virtual environment, and run:
+
+```bash
+streamlit run frontend/streamlit_app.py
+```
+
+Open the URL shown by Streamlit, usually:
+
+```text
+http://localhost:8501
+```
+
+Enter a topic such as:
 
 ```text
 Introduction to RAG
 ```
 
-The Streamlit frontend sends:
+and click **Generate Lesson**.
 
-```http
+---
+
+## 🧪 Test the Failure & Regeneration Flow
+
+The project includes a deliberate failure mode to demonstrate the self-evaluation loop.
+
+In `.env`, set:
+
+```env
+DEMO_FAILURE=true
+```
+
+Then restart the application and generate a lesson.
+
+The first attempt will contain a deliberate incorrect statement. The expected flow is:
+
+```text
+Generate
+   ↓
+Evaluate
+   ↓
+FAIL
+   ↓
+Log Failure
+   ↓
+Regenerate
+   ↓
+Evaluate Again
+   ↓
+PASS
+```
+
+The UI should show multiple attempts and the rejection details.
+
+After testing, set:
+
+```env
+DEMO_FAILURE=false
+```
+
+---
+
+# Architecture
+
+```text
+User
+  │
+  ▼
+Streamlit
+  │
+  │ HTTP POST
+  ▼
+FastAPI
+  │
+  ▼
+LangGraph
+  │
+  ├── Load Memory
+  │
+  ├── Generate ───────► Gemini
+  │
+  ├── Pre-check
+  │
+  ├── Evaluate ───────► Gemini
+  │
+  ├── PASS ───────────► Finalize
+  │
+  └── FAIL
+        │
+        ▼
+     Log Failure
+        │
+        ▼
+      SQLite
+        │
+        ▼
+     Regenerate ──────► Gemini
+        │
+        ▼
+     Evaluate Again
+```
+
+---
+
+# How It Works
+
+### 1. User Request
+
+The user enters a topic through the Streamlit frontend.
+
+Streamlit sends a request to:
+
+```text
 POST /api/v1/lessons/generate
 ```
 
-with:
+Example:
 
 ```json
 {
@@ -156,353 +199,116 @@ with:
 }
 ```
 
----
+### 2. FastAPI
 
-## Step 2 — FastAPI validates the request
+FastAPI validates the request using Pydantic and starts the LangGraph workflow.
 
-FastAPI validates the request using Pydantic.
+### 3. Load Memory
 
-It checks:
+The workflow retrieves previous failures and successful fixes for the requested topic from SQLite.
 
-* Topic exists
-* Topic is a string
-* Minimum length
-* Maximum length
+This memory is provided to the generator so previous mistakes can be avoided.
 
-If validation succeeds, FastAPI calls the LangGraph workflow.
+### 4. Generate
 
----
+The Generator sends the topic and relevant memory to Gemini and creates a complete beginner-friendly lesson.
 
-## Step 3 — LangGraph initializes state
+### 5. Pre-check
 
-The workflow creates a `LessonState` containing:
+Simple deterministic checks are performed before the LLM evaluator.
 
-```text
-topic
-lesson
-evaluation
-rejection_log
-retry_count
-max_retries
-memory
-precheck_results
-status
-```
-
-This state is passed between LangGraph nodes.
-
----
-
-## Step 4 — Load Memory
-
-The workflow queries SQLite for previous failures and successful fixes for the requested topic.
-
-Example:
-
-```text
-Previous failure:
-- Embedding was not explained.
-
-Required change:
-- Explain embedding simply.
-
-Previous successful correction:
-- Added a simple embedding explanation.
-```
-
-This information is passed to the generator.
-
----
-
-## Step 5 — Generate Lesson
-
-The Generator sends the topic and previous memory to Gemini.
-
-Gemini produces a complete beginner-friendly lesson.
-
-The generated lesson is stored in the LangGraph state.
-
----
-
-## Step 6 — Deterministic Pre-check
-
-Before using the LLM evaluator, simple Python checks are performed.
-
-Examples:
+Examples include:
 
 * Lesson is not empty
-* Lesson has reasonable length
-* "What" is covered
-* "Why" is covered
-* "How" is covered
-* At least one example exists
+* Reasonable lesson length
+* What/why/how are covered
+* At least one example is present
 
-These checks provide a cheap first layer of validation.
+### 6. Evaluate
 
----
+The Evaluator sends the lesson and the rubric to Gemini.
 
-## Step 7 — Evaluate Lesson
+The evaluator returns structured results containing:
 
-The Evaluator sends the lesson and rubric to Gemini.
+* Overall pass/fail
+* Individual criterion results
+* Reasons for failures
+* Evaluation summary
 
-The evaluator returns structured output.
+### 7. Conditional Routing
 
-Example:
+LangGraph checks the evaluation result.
 
-```json
-{
-  "overall_pass": false,
-  "checks": [
-    {
-      "criterion": "accuracy",
-      "passed": true,
-      "reason": "The technical explanation is accurate."
-    },
-    {
-      "criterion": "beginner_friendly",
-      "passed": false,
-      "reason": "Some technical concepts are not explained."
-    }
-  ],
-  "summary": "The lesson needs revision."
-}
-```
-
-The evaluator follows a strict pass/fail approach.
-
-If any required criterion fails, the lesson fails evaluation.
-
----
-
-# 8. Conditional Routing
-
-LangGraph decides what happens next.
-
-If:
+If the lesson passes:
 
 ```text
-overall_pass = true
+Evaluate → Finalize → END
 ```
 
-the workflow goes:
+If it fails and retries remain:
 
 ```text
-Evaluate
-   |
-   v
-Finalize
-   |
-   v
-END
+Evaluate → Log Failure → Regenerate → Evaluate
 ```
 
-If:
+### 8. Persistent Memory
 
-```text
-overall_pass = false
-```
+Failed attempts are stored in SQLite.
 
-and retries are available:
-
-```text
-Evaluate
-   |
-   v
-Log Failure
-   |
-   v
-Regenerate
-   |
-   v
-Pre-check
-   |
-   v
-Evaluate
-```
-
-This creates the self-evaluation loop.
-
----
-
-# 9. Failure Logging
-
-When a lesson fails, the system stores the failure in SQLite.
-
-The stored information includes:
-
-* Topic
-* Attempt number
-* Failed criteria
-* Failure reasons
-* Required changes
-* Timestamp
-
-Example:
-
-```text
-Topic:
-Introduction to RAG
-
-Attempt:
-1
-
-Failed:
-beginner_friendly
-
-Reason:
-Embedding was not explained.
-
-Required change:
-Explain embedding simply.
-```
-
----
-
-# 10. Regeneration
-
-The Regenerator receives:
-
-```text
-Original lesson
-+
-Evaluator feedback
-+
-Previous memory
-```
-
-It sends this information to Gemini and asks Gemini to rewrite the complete lesson while fixing the identified problems.
-
-The retry counter is incremented.
-
----
-
-# 11. Bounded Retries
-
-The workflow prevents infinite regeneration.
-
-Example:
-
-```text
-MAX_RETRIES=2
-```
-
-The workflow can therefore perform a limited number of corrections.
-
-If the lesson continues to fail after the retry limit, the workflow terminates with:
-
-```text
-FAILED_AFTER_MAX_RETRIES
-```
-
-This protects the system from infinite loops and unnecessary LLM/API usage.
-
----
-
-# 12. Persistent Memory
-
-SQLite is used as persistent memory.
-
-Two tables are created:
+The project uses two tables:
 
 ```text
 failures
 successful_fixes
 ```
 
-### failures
-
-Stores lessons that failed evaluation.
-
-### successful_fixes
-
-Stores corrections that successfully resulted in a passing lesson.
-
 This allows future runs to use previous feedback.
 
-Example:
+### 9. Bounded Retries
 
-```text
-Run 1
-  |
-  v
-Lesson fails
-  |
-  v
-Failure stored
-  |
-  v
-Lesson regenerated
-  |
-  v
-Lesson passes
-  |
-  v
-Successful correction stored
-```
+The workflow uses `MAX_RETRIES` to prevent infinite regeneration loops.
 
-On a future run for the same topic:
-
-```text
-SQLite
-   |
-   v
-Previous feedback
-   |
-   v
-Generator
-   |
-   v
-Better initial lesson
-```
+If the lesson continues to fail after the maximum number of retries, the workflow stops with a failure status.
 
 ---
 
-# 13. Project Structure
+# Project Structure
 
 ```text
 self-evaluating-lesson-generator/
 │
 ├── app/
-│   ├── __init__.py
-│   │
-│   ├── config.py
-│   │
-│   ├── main.py
-│   │
 │   ├── agents/
-│   │   ├── __init__.py
 │   │   ├── generator.py
 │   │   ├── evaluator.py
 │   │   └── regenerator.py
 │   │
 │   ├── api/
-│   │   ├── __init__.py
 │   │   └── lessons.py
 │   │
 │   ├── evaluation/
-│   │   ├── __init__.py
 │   │   ├── rubric.py
 │   │   └── schemas.py
 │   │
 │   ├── memory/
-│   │   ├── __init__.py
 │   │   └── database.py
 │   │
-│   └── workflow/
-│       ├── __init__.py
-│       ├── state.py
-│       └── graph.py
+│   ├── workflow/
+│   │   ├── graph.py
+│   │   └── state.py
+│   │
+│   ├── config.py
+│   └── main.py
 │
 ├── frontend/
 │   └── streamlit_app.py
 │
-├── data/
-│   └── memory.db
-│
 ├── tests/
-│   └── ...
+│   ├── test_checks.py
+│   ├── test_generator.py
+│   ├── test_memory.py
+│   └── test_workflow.py
 │
-├── .env
 ├── .gitignore
 ├── requirements.txt
 └── README.md
@@ -510,535 +316,93 @@ self-evaluating-lesson-generator/
 
 ---
 
-# 14. Prerequisites
+# Tech Stack
 
-Make sure you have:
-
-* Python 3.10+
-* Git
-* Gemini API key
-* Internet connection
-
----
-
-# 15. Create Virtual Environment
-
-### macOS/Linux
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-### Windows
-
-```powershell
-python -m venv .venv
-.venv\Scripts\activate
-```
+| Technology | Purpose                                     |
+| ---------- | ------------------------------------------- |
+| Python     | Application development                     |
+| LangGraph  | Workflow orchestration and state management |
+| Gemini     | Generation, evaluation and regeneration     |
+| FastAPI    | REST API                                    |
+| Streamlit  | User interface                              |
+| SQLite     | Persistent memory                           |
+| Pydantic   | Validation and structured outputs           |
+| Uvicorn    | API server                                  |
 
 ---
 
-# 16. Install Dependencies
+# Key Design Decisions
 
-Run:
+### LangGraph
 
-```bash
-pip install -r requirements.txt
-```
+Used to manage the stateful workflow, conditional routing, and regeneration loop.
 
----
+### FastAPI
 
-# 17. Configure Gemini API
+Separates the API layer from the AI workflow and provides request validation and Swagger documentation.
 
-Create a `.env` file in the project root.
+### Gemini
 
-```env
-GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=your_gemini_model_here
+Used for lesson generation, independent evaluation, and regeneration.
 
-MAX_RETRIES=2
+### SQLite
 
-DATABASE_PATH=data/memory.db
+Provides simple persistent memory without requiring an external database server.
 
-DEMO_FAILURE=false
-```
+### Deterministic Pre-checks
 
-Get the API key from Google AI Studio.
-
-Do not commit `.env` to GitHub.
+Basic content checks are handled with Python before invoking the evaluator, reducing unnecessary LLM calls.
 
 ---
 
-# 18. Initialize Database
+# Example Workflow
 
-The application automatically creates the SQLite tables when FastAPI starts.
-
-You can also initialize it through Python:
-
-```bash
-python -c "from app.memory.database import initialize_database; initialize_database()"
-```
-
-The database will be created at:
+For a topic such as:
 
 ```text
-data/memory.db
-```
-
----
-
-# 19. Run the Backend
-
-Start FastAPI:
-
-```bash
-uvicorn app.main:app --reload
-```
-
-The backend will run at:
-
-```text
-http://localhost:8000
-```
-
-Health check:
-
-```text
-GET /health
-```
-
----
-
-# 20. Test API Using Swagger
-
-Open:
-
-```text
-http://localhost:8000/docs
-```
-
-Find:
-
-```text
-POST /api/v1/lessons/generate
-```
-
-Click "Try it out".
-
-Use:
-
-```json
-{
-  "topic": "Introduction to RAG"
-}
-```
-
-Click "Execute".
-
-The API returns:
-
-* Final lesson
-* Evaluation
-* Number of attempts
-* Rejection log
-* Final status
-
----
-
-# 21. Run Streamlit
-
-Open another terminal.
-
-Activate the virtual environment and run:
-
-```bash
-streamlit run frontend/streamlit_app.py
-```
-
-Streamlit will provide a local URL, normally:
-
-```text
-http://localhost:8501
-```
-
-Open it in your browser.
-
-Enter a topic and click:
-
-```text
-Generate Lesson
-```
-
----
-
-# 22. Testing the Failure Loop
-
-The application contains a deliberate failure mode for demonstrating the self-evaluation workflow.
-
-In `.env`:
-
-```env
-DEMO_FAILURE=true
-```
-
-Restart FastAPI if required.
-
-Generate a lesson.
-
-The first generated lesson will contain a deliberately incorrect statement.
-
-Expected workflow:
-
-```text
-Generate
-   |
-   v
-Deliberate Error
-   |
-   v
-Evaluate
-   |
-   v
-FAIL
-   |
-   v
-Log Failure
-   |
-   v
-Regenerate
-   |
-   v
-Evaluate
-   |
-   v
-PASS
-```
-
-The Streamlit UI should show approximately:
-
-```text
-Attempts: 2
-```
-
-and display the rejection log.
-
-After testing, change:
-
-```env
-DEMO_FAILURE=false
-```
-
----
-
-# 23. Checking SQLite Memory
-
-Open the database:
-
-```bash
-sqlite3 data/memory.db
-```
-
-List tables:
-
-```sql
-.tables
-```
-
-Expected:
-
-```text
-failures
-successful_fixes
-```
-
-Check failures:
-
-```sql
-SELECT * FROM failures;
-```
-
-Check successful fixes:
-
-```sql
-SELECT * FROM successful_fixes;
-```
-
-For readable output:
-
-```sql
-.headers on
-.mode column
-
-SELECT * FROM failures;
-SELECT * FROM successful_fixes;
-```
-
-Exit:
-
-```sql
-.quit
-```
-
----
-
-# 24. API Request Flow
-
-A complete request follows:
-
-```text
-User
- |
- | Enter topic
- v
-Streamlit
- |
- | POST /api/v1/lessons/generate
- v
-FastAPI
- |
- | Validate request
- v
-LangGraph
- |
- +--> Load Memory
- |
- +--> Generate
- |       |
- |       v
- |     Gemini
- |
- +--> Pre-check
- |
- +--> Evaluate
- |       |
- |       v
- |     Gemini
- |
- +--> PASS
- |       |
- |       v
- |     Finalize
- |
- +--> FAIL
-         |
-         v
-      Log Failure
-         |
-         v
-       SQLite
-         |
-         v
-      Regenerate
-         |
-         v
-       Gemini
-         |
-         v
-      Evaluate Again
-         |
-         v
-      Finalize
-         |
-         v
-       FastAPI
-         |
-         v
-      Streamlit
-         |
-         v
-        User
-```
-
----
-
-# 25. Technology Stack
-
-| Technology       | Purpose                                        |
-| ---------------- | ---------------------------------------------- |
-| Python           | Core application                               |
-| LangGraph        | Agent workflow/orchestration                   |
-| Gemini API       | Lesson generation, evaluation and regeneration |
-| Google GenAI SDK | Gemini API integration                         |
-| FastAPI          | REST API                                       |
-| Streamlit        | Frontend                                       |
-| SQLite           | Persistent memory                              |
-| Pydantic         | Data validation and structured output          |
-| Uvicorn          | ASGI server                                    |
-| python-dotenv    | Environment configuration                      |
-
----
-
-# 26. Important Design Decisions
-
-### Why LangGraph?
-
-The workflow contains:
-
-* Multiple nodes
-* Shared state
-* Conditional routing
-* Regeneration loop
-* Bounded retries
-
-LangGraph provides a clean way to model this stateful workflow.
-
-### Why FastAPI?
-
-FastAPI handles:
-
-* HTTP requests
-* Request validation
-* API responses
-* API documentation
-* Separation between frontend and workflow
-
-### Why SQLite?
-
-The memory requirements are relatively small for this project.
-
-SQLite provides:
-
-* Persistence
-* Zero additional database server
-* Simple local setup
-* Easy inspection
-* Good fit for a take-home assignment
-
-### Why Gemini?
-
-Gemini provides the LLM capabilities required for:
-
-* Lesson generation
-* Structured evaluation
-* Lesson regeneration
-
-### Why deterministic pre-checks?
-
-Not every validation needs an LLM.
-
-Simple checks such as:
-
-* Empty content
-* Lesson length
-* Presence of examples
-* Presence of required sections
-
-can be performed cheaply with Python before invoking the evaluator.
-
----
-
-# 27. Security
-
-Never commit the Gemini API key.
-
-The `.env` file should be ignored by Git.
-
-Example:
-
-```text
-.env
-.venv/
-__pycache__/
-*.pyc
-```
-
----
-
-# 28. Future Improvements
-
-Possible improvements include:
-
-* PostgreSQL instead of SQLite
-* Vector-based memory retrieval
-* Better memory ranking
-* LangGraph checkpointing
-* Authentication
-* Streaming responses
-* Background task execution
-* Evaluation metrics
-* Token/cost tracking
-* More sophisticated deterministic validators
-* Automated tests
-* Docker deployment
-* Production logging and observability
-
----
-
-# 29. Demo Scenario
-
-For demonstrating the system:
-
-### Normal run
-
-```text
-Topic:
 Introduction to RAG
-
-Result:
-PASS
-
-Attempts:
-1
 ```
 
-### Deliberate failure
+A successful first attempt looks like:
 
 ```text
-DEMO_FAILURE=true
-
-Result:
-FAIL
-   ↓
-Log
-   ↓
-Regenerate
-   ↓
-PASS
-
-Attempts:
-2
+Generate → Pre-check → Evaluate → PASS → Finalize
 ```
 
-### Persistent memory
-
-Run the same topic again and show that previous failure information exists in SQLite and can be provided to the generator.
-
----
-
-# 30. Summary
-
-The application implements a self-evaluating content generation loop:
+If the lesson fails:
 
 ```text
 Generate
    ↓
 Evaluate
    ↓
-PASS ───────────────> Ship
-   |
-   FAIL
+FAIL
    ↓
-Log Failure
-   ↓
-Remember
+Store failure
    ↓
 Regenerate
    ↓
-Evaluate Again
+Evaluate
    ↓
-PASS ───────────────> Ship
+PASS
 ```
 
-The key architectural separation is:
+The final response contains the lesson, evaluation results, number of attempts, and rejection log.
 
-```text
-Streamlit  → UI
-FastAPI    → API
-LangGraph  → Workflow
-Gemini     → Intelligence
-SQLite     → Memory
-Pydantic   → Structured Data
-```
+---
 
-This allows the system to generate content, critically evaluate it, correct failures, remember previous feedback, and terminate safely using bounded retries.
+# Environment Variables
+
+| Variable         | Description                          |
+| ---------------- | ------------------------------------ |
+| `GEMINI_API_KEY` | Gemini API key                       |
+| `GEMINI_MODEL`   | Gemini model used by the application |
+| `MAX_RETRIES`    | Maximum regeneration attempts        |
+| `DATABASE_PATH`  | SQLite database path                 |
+| `DEMO_FAILURE`   | Enables deliberate failure testing   |
+
+---
+
+# License
+
+This project was created as a technical take-home assignment.

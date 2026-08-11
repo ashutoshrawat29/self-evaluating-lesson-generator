@@ -6,6 +6,10 @@ Built with **Python, LangGraph, Gemini, FastAPI, Streamlit, SQLite, and Pydantic
 
 ---
 
+## Architecture
+
+![System Architecture](assets/architecture.png)
+
 ## 🚀 How to Run
 
 ### 1. Clone the repository
